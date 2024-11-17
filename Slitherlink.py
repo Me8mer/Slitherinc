@@ -314,21 +314,21 @@ def debug_print_slitherlink_grid(cell_map, h_edges, v_edges, num_of_rows, num_of
 #     [None, 2, None, None, None, None]
 # ]
 
-instance = [
-    [None, None, None, 2, None, None],
-    [3, 3, None, None, 1, 0],
-    [None, None, 1, 2, None, None],
-    [None, None, 2, 0, None, None],
-    [None, 1, None, None, 1, 1],
-    [None, 2, None, None, None, None]
-]
+# instance = [
+#     [None, None, None, 2, None, None],
+#     [3, 3, None, None, 1, 0],
+#     [None, None, 1, 2, None, None],
+#     [None, None, 2, 0, None, None],
+#     [None, 1, None, None, 1, 1],
+#     [None, 2, None, None, None, None]
+# ]
 
 if __name__ == "__main__":
     args = parse_arguments()
     try:
         ##height, width, grid = read_from_args(args)
         #debug_print_cnf(cnf)
-        #grid = read_slitherlink_instance(args)
+        instance = read_slitherlink_instance(args)
         cnf, h_edges, v_edges, cell_map, num_vars = encode(instance)
 
         write_cnf_to_file(cnf, num_vars )
