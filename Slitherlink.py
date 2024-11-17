@@ -305,12 +305,21 @@ def debug_print_slitherlink_grid(cell_map, h_edges, v_edges, num_of_rows, num_of
 #instance = [[2,None],[2,None],[None,3]]
 #instance = [[3,2,2],[2,None,2],[2,3,2]]
 
+# instance = [
+#     [None, None, None, None, 0, None],
+#     [3, 3, None, None, 1, None],
+#     [None, None, 1, 2, None, None],
+#     [None, None, 2, 0, None, None],
+#     [None, 1, None, None, 1 , 1 ],
+#     [None, 2, None, None, None, None]
+# ]
+
 instance = [
-    [None, None, None, None, 0, None],
-    [3, 3, None, None, 1, None],
+    [None, None, None, 2, None, None],
+    [3, 3, None, None, 1, 0],
     [None, None, 1, 2, None, None],
     [None, None, 2, 0, None, None],
-    [None, 1, None, None, 1 , 1 ],
+    [None, 1, None, None, 1, 1],
     [None, 2, None, None, None, None]
 ]
 
