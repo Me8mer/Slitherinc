@@ -15,14 +15,15 @@ The input can be provided either as a file or through the command line. The grid
 - Each subsequent line represents a row in the grid. Cells can contain numbers (`0`, `1`, `2`, `3`) or be empty (`.`).
 
 **Example Input:**
-6 6   
+6 6
+```   
 . . . 2 . .
 3 3 . . 1 0
 . . 1 2 . .
 . . 2 0 . .
 . 1 . . 1 1
 . 2 . . . .
-
+```
 
 ## 4. Output Format
 The output is a visual representation of the solved Slitherlink grid, showing the loop edges. The grid uses horizontal (`──`) and vertical (`│`) lines to represent the loop, and the cell values are displayed as specified in the input.
