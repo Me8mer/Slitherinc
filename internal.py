@@ -1,4 +1,7 @@
 import subprocess
+'''
+class for edges. Ma main vars for constraints
+'''
 class Edge:
     _id_counter = 1 
 
@@ -6,12 +9,10 @@ class Edge:
         self.id = Edge._id_counter
         self.is_horizontal = is_horizontal
         Edge._id_counter += 1
-    
-    def create_flow(self):
-        flow = Edge._id_counter
-        Edge._id_counter += 1
-        return flow
-
+        
+'''
+Keeps track of all edges around the cell and the value of the cell.
+'''
 class Cell:
     def __init__(self, up_edge, right_edge, down_edge, left_edge, corner_cell, value, row, col ):
         self.up_edge = up_edge
@@ -26,7 +27,9 @@ class Cell:
     def get_connected_edges(self):
     # Returns a list of all edges connected to this point (ignores None values)
         return (edge for edge in [self.up_edge.id, self.right_edge.id, self.down_edge.id, self.left_edge.id] if edge is not None)
-
+'''
+Keeps track of all edges connected to the point.
+'''
 class Point:
     def __init__(self, up_edge=None, right_edge=None, down_edge=None, left_edge=None):
         self.up_edge = up_edge
@@ -37,7 +40,9 @@ class Point:
     def get_connected_edges(self):
     # Returns a list of all edges connected to this point (ignores None values)
         return [edge for edge in [self.up_edge, self.right_edge, self.down_edge, self.left_edge] if edge is not None]
-    
+
+
+# creates edges based on num of rows and cols of the grid. 
 def create_edges(num_of_rows, num_of_cols):
     y = num_of_rows       
     x = num_of_cols  
@@ -48,6 +53,7 @@ def create_edges(num_of_rows, num_of_cols):
     v_edges = [[Edge(False) for _ in range(num_of_cols + 1)] for _ in range(num_of_rows)]
     return (h_edges,v_edges)
 
+# Creates cells based on  num of rows and cols of the grid and the values from instance map
 def create_cells(h_edges, v_edges, instance_map ):
     num_of_rows = len(instance_map)
     num_of_cols = len(instance_map[0])
@@ -67,6 +73,7 @@ def create_cells(h_edges, v_edges, instance_map ):
         
     return (cells)
 
+# creates points and adds the proper edges to them
 def create_points(h_edges, v_edges, num_of_rows, num_of_cols):
     points = [[None for _ in range(num_of_cols + 1)] for _ in range(num_of_rows + 1)]
     for i in range(num_of_rows + 1):
@@ -125,7 +132,8 @@ def zero_or_two(edges, cnf):
         for j in range(i + 1, len(edges)):
             for k in range(j + 1, len(edges)):
                 cnf.append([-edges[i], -edges[j], -edges[k], 0])
-
+# Creates loop constraints. Of one edge is true in a point there must be exactly two edges true in the point. 
+# So exactly two true or all false in a point.
 def create_loop_constraints(points, cnf):
     for point in points:
         edges = point.get_connected_edges()
@@ -150,7 +158,7 @@ def create_number_constraints(cells, cnf):
                 two_value(cell, cnf)
             elif cell.value == 3:
                 three_value(cell, cnf)
-
+## Constraints for 0,1,2,3 values of cells.
 def zero_value(cell,cnf):
     up_id, right_id, down_id, left_id = cell.get_connected_edges()
     edges = [up_id, right_id, down_id, left_id]
@@ -169,7 +177,6 @@ def one_value(cell, cnf):
     for i in range(len(edges)):
         for j in range(i + 1, len(edges)):
             cnf.append([-edges[i], -edges[j], 0])
-    
     
 def two_value(cell, cnf):
     # Get the edge IDs from the cell
@@ -190,13 +197,8 @@ def three_value(cell, cnf):
     for i in range(len(edges)):
         for j in range(i + 1, len(edges)):
             cnf.append([edges[i], edges[j], 0])
-
-
+### Multiple loops logic. Iteratively runs sat solver, adding constraints if it finds a loop.
 def check_loops(edges, assignment, h_edges, v_edges):
-    """
-    Analyze the solution to determine if there are multiple loops.
-    Return True if multiple loops are detected, otherwise False.
-    """
     # Create a graph from the points
     graph = {}
 
@@ -250,9 +252,6 @@ def check_loops(edges, assignment, h_edges, v_edges):
     return components > 1  # Multiple connected components indicate multiple loops
 
 def add_loop_elimination_constraints(edges, assignment, cnf):
-    """
-    Add constraints to eliminate disjoint loops detected in the current solution.
-    """
     new_constraint = []
     for edge in edges:
         if assignment.get(edge.id, False):  # If edge is part of a loop
@@ -270,16 +269,28 @@ def write_cnf_to_file(cnf, num_vars, filename="input.cnf"):
         for clause in cnf:
             f.write(" ".join(map(str, clause)) + "\n")
 
-def run_glucose(input_file="input.cnf", output_file="solution.txt"):
-    # Run Glucose SAT solver
+def run_glucose():
+    # Run Glucose SAT run_gl
+    input_file="input.cnf"
     result = subprocess.run(['./' + "glucose", '-model', input_file],stdout=subprocess.PIPE)
-
     return result
 
-def run_sat_solver(cnf, num_vars):
+def run_sat_solver(cnf, num_vars,collect_stats=False):
     write_cnf_to_file(cnf, num_vars, filename="input.cnf")
-    result = run_glucose("input.cnf", "solution.txt")
-    return result
+    result = run_glucose()
+    if collect_stats:
+        # Collect all lines starting with 'c'
+        output = result.stdout.decode('utf-8')
+        stats = ""
+        total_cpu_time = 0.0
+        for line in output.splitlines():
+            if line.startswith("c"):
+                stats += line
+                stats += '\n'
+                if "c CPU time" in line:
+                    total_cpu_time += float(line.split(":")[1].strip().split()[0])
+        return result, stats, total_cpu_time
+    return result, "", 0.0
 
 def parse_sat_solution(result):
     output = result.stdout.decode('utf-8')
@@ -295,7 +306,11 @@ def parse_sat_solution(result):
                     assignment[var_id] = is_in_loop
     return assignment
 
-def encode(instance):
+
+def encode(instance,collect_stats=False):
+    """
+    Main function to iteratively solve the Slitherlink problem.
+    """
     cnf = []
     cell_map, point_map, h_edges, v_edges = initialise_cells_and_points(instance)
     edges = [edge for row in h_edges for edge in row] + [edge for row in v_edges for edge in row]
@@ -303,24 +318,26 @@ def encode(instance):
     cells = [cell for row in cell_map for cell in row]
     create_number_constraints(cells, cnf)
     create_loop_constraints(points, cnf)
-    #add_subtour_elimination_constraints_fixed(point_map, edges, cnf)
-    num_of_vars = len(edges)
-    return (cnf, h_edges, v_edges, cell_map, num_of_vars)
 
-def iterative_solver(instance):
-    """
-    Main function to iteratively solve the Slitherlink problem.
-    """
-    cnf, h_edges, v_edges, cell_map, num_vars = encode(instance)
-    edges = [edge for row in h_edges for edge in row] + [edge for row in v_edges for edge in row]
+    num_vars = len(edges)
+
+    total_runs = 0
+    total_cpu_time = 0.0
+    all_stats = ""
 
     while True:
-        result = run_sat_solver(cnf, num_vars)
+        result, stats, cpu_time = run_sat_solver(cnf, num_vars, collect_stats)
+        if collect_stats:
+            all_stats += "\n"
+            all_stats += stats
+            total_cpu_time += cpu_time
+            total_runs += 1
+
         if result.returncode != 10:  # UNSAT
             return -1
-
+        
         assignment = parse_sat_solution(result)
         if not check_loops(edges, assignment, h_edges, v_edges):
-            return (assignment, result, cell_map, len(instance), len(instance[0]), h_edges, v_edges)
+           return result, assignment, cell_map, len(instance), len(instance[0]), h_edges, v_edges, cnf, (all_stats, total_runs, total_cpu_time)
 
         add_loop_elimination_constraints(edges, assignment, cnf)

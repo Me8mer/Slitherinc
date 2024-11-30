@@ -1,34 +1,23 @@
+#!/usr/bin/env python3
 from internal import *
 import sys
 import argparse
 
-
 def parse_arguments():
-    parser = argparse.ArgumentParser(description="Slitherlink Solver")
+    parser = argparse.ArgumentParser(
+        description="Slitherlink SAT Solver: Solve Slitherlink puzzles using a SAT-based approach."
+        )
     parser.add_argument(
         "-i", "--input",
         type=str,
         help="Path to the input file containing the Slitherlink instance."
     )
-    parser.add_argument(
-        "-o", "--output",
-        default="formula.cnf",
-        type=str,
-        help="Output file for the DIMACS format (CNF formula)."
-    )
-    parser.add_argument(
-        "-s", "--solver",
-        default="glucose",
-        type=str,
-        help="The SAT solver to be used (default: glucose)."
-    )
-    parser.add_argument(
-        "-v", "--verb",
-        default=1,
-        type=int,
-        choices=range(0, 2),
-        help="Verbosity of the SAT solver (0: silent, 1: verbose)."
-    )
+    parser.add_argument("--print-cnf",
+        action="store_true",
+        help="Print the CNF formula to the console.")
+    parser.add_argument("--collect-stats",
+    action="store_true", 
+    help="Collect and print SAT solver statistics.")
     return parser.parse_args()
 
 def read_slitherlink_instance(args):
@@ -99,12 +88,7 @@ def read_from_cmd():
 
 
 
-def print_slitherlink_result(assignment,result, cell_map, num_of_rows, num_of_cols, h_edges, v_edges):
-    # Parse the SAT solver output
-    output = result.stdout.decode('utf-8')
-    for line in result.stdout.decode('utf-8').split('\n'):
-        print(line)                 # print the whole output of the SAT solver to stdout, so you can see the raw output for yourself
-    
+def print_slitherlink_result(assignment, cell_map, num_of_rows, num_of_cols, h_edges, v_edges):
     for i in range(num_of_rows + 1):
         # Construct strings for the horizontal edges and the cells
         upper_edge_str = "*"
@@ -146,6 +130,22 @@ def debug_print_cnf(cnf):
     print("#########################################################\n")
 
 
+def print_DIMACS_cnf(cnf):
+    """
+    Write the CNF formula to a file and optionally print it to the console.
+    """
+    for clause in cnf:
+        line = " ".join(map(str, clause)) + "\n"
+        print(line.strip())
+
+def print_stats(stats):
+    stats_strings = stats[0]
+    num_of_SAT_runs = stats[1]
+    total_CPU_time = stats[2]
+    print(stats_strings)
+    print("Total CPU time:", total_CPU_time)
+    print(f"SAT solver was run {num_of_SAT_runs} times")
+    
 
 #instance = [[2,2],[2,2]]
 #instance = [[2,None],[2,None],[None,3]]
@@ -160,27 +160,27 @@ def debug_print_cnf(cnf):
 #     [None, 2, None, None, None, None]
 # ]
 
-instance = [
-    [None, None, None, 2, None, None],
-    [3, 3, None, None, 1, 0],
-    [None, None, 1, 2, None, None],
-    [None, None, 2, 0, None, None],
-    [None, 1, None, None, 1, 1],
-    [None, 2, None, None, None, None]
-]
+# instance = [
+#     [None, None, None, 2, None, None],
+#     [3, 3, None, None, 1, 0],
+#     [None, None, 1, 2, None, None],
+#     [None, None, 2, 0, None, None],
+#     [None, 1, None, None, 1, 1],
+#     [None, 2, None, None, None, None]
+# ]
 
 if __name__ == "__main__":
     args = parse_arguments()
     try:
-        ##height, width, grid = read_from_args(args)
-
-        #instance = read_slitherlink_instance(args)
-        result = iterative_solver(instance)
+        instance = read_slitherlink_instance(args)
+        result, assignment,  cell_map, num_of_rows, num_of_cols, h_edges, v_edges, cnf, stats = encode(instance, args.collect_stats)
+        if args.collect_stats: print_stats(stats)
         if result == -1:
             print("Result is not found.")
         else:
-            print_slitherlink_result(result[0],result[1],result[2],result[3],result[4],result[5], result[6])
-        #debug_print_cnf(cnf)
+            if args.print_cnf: print_DIMACS_cnf(result[7])
+            print_slitherlink_result(assignment, cell_map, num_of_rows, num_of_cols, h_edges, v_edges)
+           
     except Exception as e:
         print(f"Error: {e}")
 
