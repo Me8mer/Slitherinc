@@ -1,3 +1,4 @@
+import subprocess
 class Edge:
     _id_counter = 1 
 
@@ -191,50 +192,108 @@ def three_value(cell, cnf):
             cnf.append([edges[i], edges[j], 0])
 
 
-def add_subtour_elimination_constraints_fixed(point_map, edges, cnf):
+def check_loops(edges, assignment, h_edges, v_edges):
     """
-    Adds subtour elimination constraints to ensure a single loop in Slitherlink.
-    Fixes the issue by correctly mapping edge indices to point indices.
+    Analyze the solution to determine if there are multiple loops.
+    Return True if multiple loops are detected, otherwise False.
     """
-    num_points = len(point_map) * len(point_map[0])
-    loop_vars = list(range(max(edge.id for edge in edges) + 1, max(edge.id for edge in edges) + 1 + num_points))
+    # Create a graph from the points
+    graph = {}
 
-    # 1. Initialize auxiliary loop variables for each point
-    for i in range(num_points):
-        cnf.append([loop_vars[i], 0])  # Each point starts as part of the loop
+    # Build graph from horizontal edges
+    for i in range(len(h_edges)):
+        for j in range(len(h_edges[i])):
+            edge = h_edges[i][j]
+            if assignment.get(edge.id, False):  # Edge is in the loop
+                point1 = (i, j)
+                point2 = (i, j + 1)
+                if point1 not in graph:
+                    graph[point1] = []
+                if point2 not in graph:
+                    graph[point2] = []
+                graph[point1].append(point2)
+                graph[point2].append(point1)
 
-    # Helper function to get point indices from edge connections
-    def get_point_indices(edge):
-        for row_index, row in enumerate(point_map):
-            for col_index, point in enumerate(row):
-                connected_edges = point.get_connected_edges()
-                if edge in connected_edges:
-                    return row_index * len(point_map[0]) + col_index
-        return None
+    # Build graph from vertical edges
+    for i in range(len(v_edges)):
+        for j in range(len(v_edges[i])):
+            edge = v_edges[i][j]
+            if assignment.get(edge.id, False):  # Edge is in the loop
+                point1 = (i, j)
+                point2 = (i + 1, j)
+                if point1 not in graph:
+                    graph[point1] = []
+                if point2 not in graph:
+                    graph[point2] = []
+                graph[point1].append(point2)
+                graph[point2].append(point1)
 
-    # 2. Subtour Elimination: Prevent small disjoint loops
-    for i in range(len(edges)):
-        for j in range(i + 1, len(edges)):
-            edge_i = edges[i]
-            edge_j = edges[j]
+    # Use BFS or DFS to check connectivity
+    visited = set()
+    components = 0
 
-            if edge_i is not None and edge_j is not None:
-                point_index_i = get_point_indices(edge_i)
-                point_index_j = get_point_indices(edge_j)
+    def dfs(node):
+        stack = [node]
+        while stack:
+            current = stack.pop()
+            if current not in visited:
+                visited.add(current)
+                for neighbor in graph.get(current, []):
+                    if neighbor not in visited:
+                        stack.append(neighbor)
 
-                if point_index_i is not None and point_index_j is not None:
-                    # If both edges are selected, they cannot form a disjoint cycle
-                    cnf.append([-edge_i.id, -edge_j.id, loop_vars[point_index_i], loop_vars[point_index_j], 0])
-                    cnf.append([edge_i.id, -loop_vars[point_index_i], -loop_vars[point_index_j], 0])
-                    cnf.append([edge_j.id, -loop_vars[point_index_i], -loop_vars[point_index_j], 0])
+    for point in graph:
+        if point not in visited:
+            components += 1
+            dfs(point)
 
-    # 3. Single Loop Check: Ensure all points belong to a single loop component
-    main_loop_var = loop_vars[0]
-    for loop_var in loop_vars:
-        cnf.append([-main_loop_var, loop_var, 0])
-        cnf.append([main_loop_var, -loop_var, 0])
+    return components > 1  # Multiple connected components indicate multiple loops
 
+def add_loop_elimination_constraints(edges, assignment, cnf):
+    """
+    Add constraints to eliminate disjoint loops detected in the current solution.
+    """
+    new_constraint = []
+    for edge in edges:
+        if assignment.get(edge.id, False):  # If edge is part of a loop
+            # Prevent this edge from forming a disjoint cycle in the next iteration
+            new_constraint.append(-edge.id)
+    new_constraint.append(0)
+    cnf.append(new_constraint)
 
+def write_cnf_to_file(cnf, num_vars, filename="input.cnf"):
+    with open(filename, "w") as f:
+        # Write the problem line: p cnf <num_vars> <num_clauses>
+        num_clauses = len(cnf)
+        f.write(f"p cnf {num_vars} {num_clauses}\n")
+        # Write each clause
+        for clause in cnf:
+            f.write(" ".join(map(str, clause)) + "\n")
+
+def run_glucose(input_file="input.cnf", output_file="solution.txt"):
+    # Run Glucose SAT solver
+    result = subprocess.run(['./' + "glucose", '-model', input_file],stdout=subprocess.PIPE)
+
+    return result
+
+def run_sat_solver(cnf, num_vars):
+    write_cnf_to_file(cnf, num_vars, filename="input.cnf")
+    result = run_glucose("input.cnf", "solution.txt")
+    return result
+
+def parse_sat_solution(result):
+    output = result.stdout.decode('utf-8')
+    assignment = {}
+    for line in output.split('\n'):
+        if line.startswith("v"):
+            vars = line.split(" ")
+            vars.remove("v")
+            for var in vars:
+                if var != "0":
+                    var_id = abs(int(var))
+                    is_in_loop = int(var) > 0
+                    assignment[var_id] = is_in_loop
+    return assignment
 
 def encode(instance):
     cnf = []
@@ -247,3 +306,21 @@ def encode(instance):
     #add_subtour_elimination_constraints_fixed(point_map, edges, cnf)
     num_of_vars = len(edges)
     return (cnf, h_edges, v_edges, cell_map, num_of_vars)
+
+def iterative_solver(instance):
+    """
+    Main function to iteratively solve the Slitherlink problem.
+    """
+    cnf, h_edges, v_edges, cell_map, num_vars = encode(instance)
+    edges = [edge for row in h_edges for edge in row] + [edge for row in v_edges for edge in row]
+
+    while True:
+        result = run_sat_solver(cnf, num_vars)
+        if result.returncode != 10:  # UNSAT
+            return -1
+
+        assignment = parse_sat_solution(result)
+        if not check_loops(edges, assignment, h_edges, v_edges):
+            return (assignment, result, cell_map, len(instance), len(instance[0]), h_edges, v_edges)
+
+        add_loop_elimination_constraints(edges, assignment, cnf)
