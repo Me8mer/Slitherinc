@@ -198,67 +198,77 @@ def three_value(cell, cnf):
         for j in range(i + 1, len(edges)):
             cnf.append([edges[i], edges[j], 0])
 ### Multiple loops logic. Iteratively runs sat solver, adding constraints if it finds a loop.
-def check_loops(edges, assignment, h_edges, v_edges):
-    # Create a graph from the points
+
+def find_components(assignment, h_edges, v_edges):
+    """
+    Find connected components of edges based on the current SAT assignment.
+    Groups edges into components.
+    """
     graph = {}
 
     # Build graph from horizontal edges
     for i in range(len(h_edges)):
         for j in range(len(h_edges[i])):
             edge = h_edges[i][j]
-            if assignment.get(edge.id, False):  # Edge is in the loop
+            if assignment.get(edge.id, False):  # Edge is active
                 point1 = (i, j)
                 point2 = (i, j + 1)
                 if point1 not in graph:
                     graph[point1] = []
                 if point2 not in graph:
                     graph[point2] = []
-                graph[point1].append(point2)
-                graph[point2].append(point1)
+                graph[point1].append((point2, edge))
+                graph[point2].append((point1, edge))
 
     # Build graph from vertical edges
     for i in range(len(v_edges)):
         for j in range(len(v_edges[i])):
             edge = v_edges[i][j]
-            if assignment.get(edge.id, False):  # Edge is in the loop
+            if assignment.get(edge.id, False):  # Edge is active
                 point1 = (i, j)
                 point2 = (i + 1, j)
                 if point1 not in graph:
                     graph[point1] = []
                 if point2 not in graph:
                     graph[point2] = []
-                graph[point1].append(point2)
-                graph[point2].append(point1)
+                graph[point1].append((point2, edge))
+                graph[point2].append((point1, edge))
 
-    # Use BFS or DFS to check connectivity
+    # Find connected components
     visited = set()
-    components = 0
+    components = []
 
     def dfs(node):
         stack = [node]
+        component_edges = []
         while stack:
             current = stack.pop()
             if current not in visited:
                 visited.add(current)
-                for neighbor in graph.get(current, []):
+                for neighbor, edge in graph.get(current, []):
                     if neighbor not in visited:
                         stack.append(neighbor)
+                    if edge not in component_edges:
+                        component_edges.append(edge)
+        return component_edges
 
+    # Identify components
     for point in graph:
         if point not in visited:
-            components += 1
-            dfs(point)
+            edges = dfs(point)
+            components.append(edges)
 
-    return components > 1  # Multiple connected components indicate multiple loops
+    return components
 
-def add_loop_elimination_constraints(edges, assignment, cnf):
-    new_constraint = []
-    for edge in edges:
-        if assignment.get(edge.id, False):  # If edge is part of a loop
-            # Prevent this edge from forming a disjoint cycle in the next iteration
-            new_constraint.append(-edge.id)
-    new_constraint.append(0)
-    cnf.append(new_constraint)
+def add_loop_elimination_constraints(components, assignment, cnf):
+    for component in components:
+        new_constraint = []
+        for component_edge in component:         
+            if assignment.get(component_edge.id, False):  # If edge is part of a loop
+                # Prevent this edge from forming a disjoint cycle in the next iteration
+                new_constraint.append(-component_edge.id)
+        new_constraint.append(0)
+        cnf.append(new_constraint)
 
 def write_cnf_to_file(cnf, num_vars, filename="input.cnf"):
     with open(filename, "w") as f:
@@ -334,10 +344,10 @@ def encode(instance,collect_stats=False):
             total_runs += 1
 
         if result.returncode != 10:  # UNSAT
-            return -1
+            return result, None, cell_map, len(instance), len(instance[0]), h_edges, v_edges, cnf, (all_stats, total_runs, total_cpu_time)
         
         assignment = parse_sat_solution(result)
-        if not check_loops(edges, assignment, h_edges, v_edges):
+        components = find_components(assignment, h_edges, v_edges)
+        if len(components) == 1:
            return result, assignment, cell_map, len(instance), len(instance[0]), h_edges, v_edges, cnf, (all_stats, total_runs, total_cpu_time)
-
-        add_loop_elimination_constraints(edges, assignment, cnf)
+        add_loop_elimination_constraints(components, assignment, cnf)

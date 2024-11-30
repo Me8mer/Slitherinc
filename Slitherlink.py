@@ -31,8 +31,8 @@ def read_slitherlink_instance(args):
 def read_from_file(file_path):
     with open(file_path, 'r') as file:
         # Read grid dimensions
-        height, width = map(int, file.readline().strip().split())
-
+        height = try_parse_int(file.readline().strip())
+        width = try_parse_int(file.readline().strip())
         if height <= 0 or width <= 0:
             raise ValueError("Grid dimensions must be positive integers.")
 
@@ -58,8 +58,8 @@ def read_from_file(file_path):
 
 def read_from_cmd():
     # Get grid dimensions from user input
-    height = int(input("Enter the number of rows (height): "))
-    width = int(input("Enter the number of columns (width): "))
+    height = try_parse_int(input("Enter the number of rows (height): "))
+    width = try_parse_int(input("Enter the number of columns (width): "))
 
     if height <= 0 or width <= 0:
         raise ValueError("Grid dimensions must be positive integers.")
@@ -87,6 +87,12 @@ def read_from_cmd():
     return grid
 
 
+def try_parse_int(value):
+    error_message = f"Invalid integer: {value}"
+    try:
+        return int(value)
+    except ValueError:
+        raise ValueError(error_message)
 
 def print_slitherlink_result(assignment, cell_map, num_of_rows, num_of_cols, h_edges, v_edges):
     for i in range(num_of_rows + 1):
@@ -173,12 +179,13 @@ if __name__ == "__main__":
     args = parse_arguments()
     try:
         instance = read_slitherlink_instance(args)
-        result, assignment,  cell_map, num_of_rows, num_of_cols, h_edges, v_edges, cnf, stats = encode(instance, args.collect_stats)
+        result, assignment, cell_map, num_of_rows, num_of_cols, h_edges, v_edges, cnf, stats = encode(instance, args.collect_stats)
         if args.collect_stats: print_stats(stats)
-        if result == -1:
+        if args.print_cnf: print_DIMACS_cnf(cnf)
+        if result.returncode != 10:
             print("Result is not found.")
         else:
-            if args.print_cnf: print_DIMACS_cnf(result[7])
+            
             print_slitherlink_result(assignment, cell_map, num_of_rows, num_of_cols, h_edges, v_edges)
            
     except Exception as e:
